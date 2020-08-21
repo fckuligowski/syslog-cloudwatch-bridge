@@ -95,10 +95,19 @@ func sendToCloudWatch(buffer []format.LogParts) {
 	sort.Slice(buffer, func(i, j int) bool { return buffer[i]["timestamp"].(time.Time).Before(buffer[j]["timestamp"].(time.Time)) })
 
 	for _, logPart := range buffer {
-		params.LogEvents = append(params.LogEvents, &cloudwatchlogs.InputLogEvent{
-			Message:   aws.String(logPart["content"].(string)),
-			Timestamp: aws.Int64(makeMilliTimestamp(logPart["timestamp"].(time.Time))),
-		})
+		// Message:   aws.String(logPart["message"].(string)),
+		// Message:   aws.String(logPart["content"].(string)),
+		if logPart["message"] != nil {
+			params.LogEvents = append(params.LogEvents, &cloudwatchlogs.InputLogEvent{
+				Message:   aws.String(logPart["message"].(string)),
+				Timestamp: aws.Int64(makeMilliTimestamp(logPart["timestamp"].(time.Time))),
+			})	
+		} else if logPart["content"] != nil {
+			params.LogEvents = append(params.LogEvents, &cloudwatchlogs.InputLogEvent{
+				Message:   aws.String(logPart["content"].(string)),
+				Timestamp: aws.Int64(makeMilliTimestamp(logPart["timestamp"].(time.Time))),
+			})	
+		}
 	}
 
 	// first request has no SequenceToken - in all subsequent request we set it
@@ -109,10 +118,19 @@ func sendToCloudWatch(buffer []format.LogParts) {
 	resp, err := svc.PutLogEvents(params)
 	if err != nil {
 		log.Println(err)
+		dparams := &cloudwatchlogs.DescribeLogStreamsInput{
+			Limit:         aws.Int64(1),
+			LogGroupName:  aws.String(logGroupName),
+		}
+		dresp, derr := svc.DescribeLogStreams(dparams)
+		if derr != nil {
+			sequenceToken = *dresp.NextToken
+		}
+	} else {
+		sequenceToken = *resp.NextSequenceToken
 	}
 	log.Printf("Pushed %v entries to CloudWatch", len(buffer))
-
-	sequenceToken = *resp.NextSequenceToken
+	
 }
 
 func initCloudWatchStream() {
