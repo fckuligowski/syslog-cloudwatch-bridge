@@ -1,0 +1,61 @@
+
+# This command bombs when you start it up
+docker run -e AWS_REGION=eu-west-1 \
+   -e AWS_ACCESS_KEY_ID=<aws-access-key-redacted> \
+   -e AWS_SECRET_ACCESS_KEY=<aws-secret-key-redacted> \
+   -e LOG_GROUP_NAME=pks-tkg-eu-logs \
+   -p 514:514 \
+   -p 514:514/udp \
+   rjocoleman/syslog-cloudwatch-bridge
+
+# This command worked. It doesn't seem to want to listen on port 514
+# as that will cause a crash at startup   
+docker run -e AWS_REGION=eu-west-1 \
+   -e AWS_ACCESS_KEY_ID=<aws-access-key-redacted> \
+   -e AWS_SECRET_ACCESS_KEY=<aws-secret-key-redacted> \
+   -e LOG_GROUP_NAME=pks-tkg-eu-logs \
+   -p 5014:514 \
+   -p 5014:514/udp \
+   rjocoleman/syslog-cloudwatch-bridge
+   
+# I had to "make build release" to keep it from crashing when TKGI would
+# send logs from LogSink resource (from my app's pod logs).
+docker run -e AWS_REGION=eu-west-1 \
+   -e AWS_ACCESS_KEY_ID=<aws-access-key-redacted> \
+   -e AWS_SECRET_ACCESS_KEY=<aws-secret-key-redacted> \
+   -e LOG_GROUP_NAME=pks-tkg-eu-logs \
+   -p 5014:514 \
+   -p 5014:514/udp \
+   fckuligowski/syslog-cloudwatch-bridge
+   
+# This command will send a Cert and Key to the app, so it can use it
+# to open a TLS connection. But the app wouldn't parse the messages
+# for me after I did that.
+docker run -e AWS_REGION=eu-west-1 \
+   -e AWS_ACCESS_KEY_ID=<aws-access-key-redacted> \
+   -e AWS_SECRET_ACCESS_KEY=<aws-secret-key-redacted> \
+   -e LOG_GROUP_NAME=pks-tkg-eu-logs \
+   -p 5014:514 \
+   -p 5014:514/udp \
+   -v ~/tanzu/certs:/certs \
+   -e TLS_CERT_FILE=/certs/syslog.crt \
+   -e TLS_KEY_FILE=/certs/syslog.key \
+   fckuligowski/syslog-cloudwatch-bridge
+   
+   
+I could then use Kiwi Syslog Message Generator to send messages to this app's
+endpoint, but I had to turn on these options.
+- Add CR/LF
+- Add Syslog RFC Header
+   
+# Docker install instructions
+https://docs.docker.com/engine/install/ubuntu/#next-steps
+sudo usermod -aG docker $USER
+sudo chmod 666 /var/run/docker.sock # if still getting perm error
+log out and back in
+
+# Go install instructions
+https://www.educative.io/edpresso/how-to-install-go-on-ubuntu
+Then, for each of  the packges included at the top of main.go, do:
+go get gopkg.in/mcuadros/go-syslog.v2
+go get <pkg name shown in main.go>

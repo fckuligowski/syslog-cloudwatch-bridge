@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 	"sort"
+	"io/ioutil"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -54,9 +55,31 @@ func main() {
 	server := syslog.NewServer()
 	server.SetFormat(syslog.Automatic)
 	server.SetHandler(handler)
-	server.ListenUDP(address)
-	server.ListenTCP(address)
-
+	// See if user wants to use TLS encryption
+	var tlsCertFile = os.Getenv("TLS_CERT_FILE")
+	var tlsKeyFile = os.Getenv("TLS_KEY_FILE")
+	if tlsCertFile != "" && tlsKeyFile != "" {
+		log.Println("tlsKeyFile=", tlsKeyFile)
+		tlsCert, err := ioutil.ReadFile(tlsCertFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		tlsKey, err := ioutil.ReadFile(tlsKeyFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Open connection that uses TLS encryption
+		cert, err := tls.X509KeyPair(tlsCert, tlsKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
+		server.ListenTCPTLS(address, cfg)
+	} else {
+		// Open connection that doesn't use TLS
+		server.ListenUDP(address)
+		server.ListenTCP(address)
+	}
 	server.Boot()
 
 	go func(channel syslog.LogPartsChannel) {
@@ -64,6 +87,7 @@ func main() {
 		defer ticker.Stop() // release when done, if we ever will
 
 		loglist := make([]format.LogParts, 0)
+		log.Println("got message")
 		for {
 			select {
 				case <- ticker.C:
@@ -74,6 +98,8 @@ func main() {
 					loglist = make([]format.LogParts, 0)
 				case logParts := <- channel:
 					loglist = append(loglist, logParts)
+				default:
+					log.Println("skip message")
 			}
 		}
 	}(channel)
