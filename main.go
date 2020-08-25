@@ -55,6 +55,7 @@ func main() {
 	server := syslog.NewServer()
 	server.SetFormat(syslog.Automatic)
 	server.SetHandler(handler)
+
 	// See if user wants to use TLS encryption
 	var tlsCertFile = os.Getenv("TLS_CERT_FILE")
 	var tlsKeyFile = os.Getenv("TLS_KEY_FILE")
@@ -80,14 +81,15 @@ func main() {
 		server.ListenUDP(address)
 		server.ListenTCP(address)
 	}
+	log.Println("Booting Server")
 	server.Boot()
 
+	log.Println("Defining handler channel")
 	go func(channel syslog.LogPartsChannel) {
 		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop() // release when done, if we ever will
 
 		loglist := make([]format.LogParts, 0)
-		log.Println("got message")
 		for {
 			select {
 				case <- ticker.C:
@@ -98,13 +100,13 @@ func main() {
 					loglist = make([]format.LogParts, 0)
 				case logParts := <- channel:
 					loglist = append(loglist, logParts)
-				default:
-					log.Println("skip message")
 			}
 		}
 	}(channel)
 
+	log.Println("Waiting for input")
 	server.Wait()
+	log.Println("Finished")
 }
 
 func sendToCloudWatch(buffer []format.LogParts) {
